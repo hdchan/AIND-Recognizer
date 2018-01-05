@@ -104,6 +104,41 @@ class SelectorCV(ModelSelector):
 
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
-
+        
         # TODO implement model selection using CV
-        raise NotImplementedError
+ 
+        best_num_components = self.n_constant
+        best_average = float("-inf")
+
+        for n_components in range(self.min_n_components, self.max_n_components + 1):
+            fold_scores = []
+
+            n_split = self.n_constant if len(self.sequences) > 3 else len(self.sequences)
+            split_method = KFold(n_split, random_state=self.random_state)
+     
+            for cv_train_idx, cv_test_idx in split_method.split(self.sequences):
+                train_X, train_lengths = combine_sequences(cv_train_idx, self.sequences)
+                test_X, test_lengths = combine_sequences(cv_test_idx, self.sequences)
+                
+                try:
+                    current_model = GaussianHMM(n_components=n_components, covariance_type="diag", n_iter=1000,
+                                            random_state=self.random_state, verbose=False).fit(train_X, train_lengths)
+                    try:
+                        score = current_model.score(test_X, test_lengths)
+                    except:
+                        score = float("-inf")
+
+                    fold_scores.append(score)
+
+                except Exception as e:
+                    fold_scores.append(float("-inf"))
+
+                    
+            curr_avg = np.mean(fold_scores)
+            if self.verbose:
+                print("split: {} with scores: {}".format(n_split,fold_scores))
+            if curr_avg > best_average:
+                best_average = curr_avg
+                best_num_components = n_components
+
+        return self.base_model(best_num_components)
