@@ -32,18 +32,21 @@ class ModelSelector(object):
         raise NotImplementedError
 
     def base_model(self, num_states):
+        return self.model_for(num_states, self.X, self.lengths, self.this_word)
+    
+    def model_for(self, num_states, X, lengths, this_word):
         # with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=DeprecationWarning)
         # warnings.filterwarnings("ignore", category=RuntimeWarning)
         try:
             hmm_model = GaussianHMM(n_components=num_states, covariance_type="diag", n_iter=1000,
-                                    random_state=self.random_state, verbose=False).fit(self.X, self.lengths)
+                                    random_state=self.random_state, verbose=False).fit(X, lengths)
             if self.verbose:
-                print("model created for {} with {} states".format(self.this_word, num_states))
+                print("model created for {} with {} states".format(this_word, num_states))
             return hmm_model
         except:
             if self.verbose:
-                print("failure on {} with {} states".format(self.this_word, num_states))
+                print("failure on {} with {} states".format(this_word, num_states))
             return None
 
 
@@ -111,12 +114,34 @@ class SelectorDIC(ModelSelector):
     https://pdfs.semanticscholar.org/ed3d/7c4a5f607201f3848d4c02dd9ba17c791fc2.pdf
     DIC = log(P(X(i)) - 1/(M-1)SUM(log(P(X(all but i))
     '''
-
+    
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         # TODO implement model selection based on DIC scores
-        raise NotImplementedError
+        best_num_components = self.n_constant
+        best_dic = float("-inf")
+        
+        for num_states in range(self.min_n_components, self.max_n_components + 1):
+            dic = {}
+            for word in self.words:
+                try:
+                    X, lengths = self.hwords[word]
+                    model = self.model_for(num_states, X, lengths, word)
+                    dic[word] = model.score(X, lengths)
+                except:
+                    if self.verbose:
+                        print("failure on {} with {} states".format(self.this_word, num_states))
+                    continue
+            
+            if self.this_word in dic:
+                curr_dic = dic[self.this_word] - np.mean([dic[word] for word in dic if word != self.this_word])
+
+                if curr_dic > best_dic:
+                    best_dic = curr_dic
+                    best_num_components = num_states
+
+        return self.base_model(best_num_components)
 
 
 class SelectorCV(ModelSelector):
