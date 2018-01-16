@@ -38,7 +38,9 @@ def recognize(models: dict, test_set: SinglesData):
                         best_score = score
                         best_guess = current_word
                 except:
-                    continue
+                    dic[current_word] = float("-inf")
+            else:
+                dic[current_word] = float("-inf")
         probabilities.append(dic)
         guesses.append(best_guess)
 
