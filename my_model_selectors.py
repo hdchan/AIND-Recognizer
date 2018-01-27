@@ -93,7 +93,7 @@ class SelectorBIC(ModelSelector):
                 # calculated parameters from this discussion
                 # https://discussions.udacity.com/t/bug-in-my-code-in-dic-selector-function-call-not-working-basic-python/337028/18
                 p = num_states ** 2 + 2 * num_states * hmm_model.n_features - 1
-                curr_bic = -2 * logL + p * np.log(num_states)
+                curr_bic = -2 * logL + p * np.log(len(self.X))
 
                 if curr_bic < best_bic:
                     best_bic = curr_bic
@@ -114,7 +114,8 @@ class SelectorDIC(ModelSelector):
     https://pdfs.semanticscholar.org/ed3d/7c4a5f607201f3848d4c02dd9ba17c791fc2.pdf
     DIC = log(P(X(i)) - 1/(M-1)SUM(log(P(X(all but i))
     '''
-    
+    # Essentially the difference between the scoreing of the current word
+    # & the average score of all the other words
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -123,23 +124,32 @@ class SelectorDIC(ModelSelector):
         best_dic = float("-inf")
         
         for num_states in range(self.min_n_components, self.max_n_components + 1):
-            dic = {}
-            for word in self.words:
-                try:
-                    X, lengths = self.hwords[word]
-                    model = self.model_for(num_states, X, lengths, word)
-                    dic[word] = model.score(X, lengths)
-                except:
-                    if self.verbose:
-                        print("failure on {} with {} states".format(self.this_word, num_states))
-                    continue
-            
-            if self.this_word in dic:
-                curr_dic = dic[self.this_word] - np.mean([dic[word] for word in dic if word != self.this_word])
+            scores = []
+
+            try:
+                model = self.model_for(num_states, self.X, self.lengths, self.this_word)
+                this_word_score = model.score(self.X, self.lengths)
+
+                for word in self.words:
+                    try:
+                        if word == self.this_word:
+                            continue
+                        X, lengths = self.hwords[word]
+                        scores.append(model.score(X, lengths))
+                    except:
+                        if self.verbose:
+                            print("failure on {} with {} states".format(self.this_word, num_states))
+                        continue
+                
+                curr_dic = this_word_score - np.mean(scores)
 
                 if curr_dic > best_dic:
                     best_dic = curr_dic
                     best_num_components = num_states
+            except:
+                if self.verbose:
+                    print("failed to generate model for {} with {} component(s)".format(self.this_word, num_states))
+                continue
 
         return self.base_model(best_num_components)
 
